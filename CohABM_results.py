@@ -26,4 +26,4 @@ if __name__ == '__main__':
 
 #Export results
     results_df = pd.DataFrame(results)
-    results_df.to_csv("C:/Users/marti/Documents/coherence_results/results.csv")
+    results_df.to_csv(".../results.csv")
