@@ -1,0 +1,7 @@
+mesa==2.3.2
+numpy==1.26.4
+pandas==2.2.2
+bnlearn==0.8.9
+networkx==3.2.1
+seaborn==0.13.2
+matplotlib==3.9.2
