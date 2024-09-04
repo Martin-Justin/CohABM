@@ -10,7 +10,7 @@ params = {"N":10,
            "pulls":10,
            "agent_type":["CoherenceAgent", "NormalAgent"],
            "noise":[0.2, 0.5, 0.8],
-           "coherence_style":["shogenji", "og"],
+           "coherence_style":["shogenji", "og", "ogPlus"],
            "misleading_type": ["small_sample", "big_sprinkler"]}
 
 if __name__ == '__main__':
@@ -20,10 +20,10 @@ if __name__ == '__main__':
         parameters=params,
         iterations=30,
         max_steps=30,
-        number_processes=1,
+        number_processes=None,
         data_collection_period=1,
         display_progress=True,)
 
 #Export results
     results_df = pd.DataFrame(results)
-    results_df.to_csv(".../results.csv")
+    results_df.to_csv("results.csv")
