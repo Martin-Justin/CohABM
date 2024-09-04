@@ -70,7 +70,7 @@ params = {"N": range(2, 10, 1),
            "pulls":range(10, 100, 10),
            "agent_type":["CoherenceAgent", "NormalAgent"],
            "noise": range(0, 1, 0.1),
-           "coherence_style":["shogenji", "og", "ogPLUS"],
+           "coherence_style":["shogenji", "og", "ogPlus"],
            "misleading_type": ["small_sample", "big_sprinkler"]}
 
 if __name__ == '__main__':  
