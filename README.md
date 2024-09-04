@@ -46,7 +46,7 @@ is the most probable world, is more coherent than their previous one. They can d
 coherence measures, one suggested by Shogenji ([1999](https://philpapers.org/rec/SHOICT-2)), another
 one independently presented by Olsson ([2002](https://philpapers.org/rec/OLSWIT)) and 
 Glass ([2002](https://link.springer.com/chapter/10.1007/3-540-45750-X_23)), and the third one suggested by
-Hartmann and Trpin (forthcoming).
+Hartmann and Trpin ([forthcoming](https://philsci-archive.pitt.edu/22792/)).
 
 Agents can also get misleading evidence with some probability ("noise"), which is determined as a 
 parameter of the model. 
