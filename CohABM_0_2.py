@@ -204,7 +204,7 @@ common_prior = common_prior_sprinkler()
 
 # Agents who consider social coherence
 class CoherenceAgent(mesa.Agent):
-    def __init__(self, unique_id, model, BN, pulls, noise, coherence_style, prior_type):
+    def __init__(self, unique_id, model, BN, pulls, coherence_style, prior_type):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
         self.background = bn.import_DAG(BN, CPD=False, verbose=0)
@@ -277,7 +277,7 @@ class CoherenceAgent(mesa.Agent):
 
 # Agents who ignore coherence
 class NormalAgent(mesa.Agent):
-    def __init__(self, unique_id, model, BN, pulls, noise, prior_type):
+    def __init__(self, unique_id, model, BN, pulls, prior_type):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
         self.background = bn.import_DAG(BN, CPD=False, verbose=0)
@@ -348,9 +348,9 @@ class CoherenceModel(mesa.Model):
         # Create a list of agents and place them in a network
         for i in range(self.num_agents):
             if agent_type == "CoherenceAgent":
-                a = CoherenceAgent(i, self, BN, pulls, noise, coherence_style, prior_type)
+                a = CoherenceAgent(i, self, BN, pulls, coherence_style, prior_type)
             elif agent_type == "NormalAgent":
-                a = NormalAgent(i, self, BN, pulls, noise, prior_type)
+                a = NormalAgent(i, self, BN, pulls, prior_type)
 
             self.schedule.add(a)
             self.space.place_agent(a, i) if self.space.is_cell_empty(i) else exit(1)

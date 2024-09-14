@@ -5,20 +5,21 @@ from multiprocessing import freeze_support
 
 
 params = {"N":10,
-           "network": ["complete", "wheel", "cycle"],
+           "network": ["complete", "cycle", "wheel"],
            "BN": "sprinkler",
-           "pulls":10,
+           "pulls":100,
            "agent_type":["CoherenceAgent", "NormalAgent"],
-           "noise":[0.2, 0.5, 0.8],
-           "coherence_style":["shogenji", "og", "ogPlus"],
-           "misleading_type": ["small_sample", "big_sprinkler"]}
+           "noise":0.1,
+           "coherence_style":["ogPlus"],
+           "misleading_type": ["noisy_data", "big_sprinkler"],
+           "prior_type": ["common", "random"]}
 
 if __name__ == '__main__':
     freeze_support()
     results = mesa.batch_run(
         CoherenceModel,
         parameters=params,
-        iterations=30,
+        iterations=10,
         max_steps=30,
         number_processes=None,
         data_collection_period=1,
@@ -26,4 +27,4 @@ if __name__ == '__main__':
 
 #Export results
     results_df = pd.DataFrame(results)
-    results_df.to_csv("results.csv")
+    results_df.to_csv("C:/Users/marti/Documents/coherence_results/test_00.csv")
