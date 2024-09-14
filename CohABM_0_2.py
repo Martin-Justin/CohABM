@@ -75,8 +75,9 @@ def coherence(model,style="shogenji"):
     inference_Df.loc[1,"p"]=max_p
     max_probability_rows = inference_Df[inference_Df['p'] == max_p]
     if len(max_probability_rows)>1:
-        random_row=random.choice(range(len(max_probability_rows)))
-        max_probability_rows=max_probability_rows.iloc[random_row:random_row+1]
+       max_probability_rows = max_probability_rows.iloc[:1]
+       # random_row=random.choice(range(len(max_probability_rows)))
+       # max_probability_rows=max_probability_rows.iloc[random_row:random_row+1]
         #if there are multiple equiprobable and maximum probability states, go for a uniformly random one (this is a simplification, but it shouldn't have too much of an impact on the results, I hope)
 
     if style=="shogenji":
@@ -124,15 +125,24 @@ def kl_divergence(actual, believed):
     return (merged_df['p_actual'] * np.log(merged_df['p_actual'] / merged_df['p_hypothetical'])).sum()
 
 
+def noisy_data(df: pd.DataFrame, percentage: float) -> pd.DataFrame:
+    # Calculate how many values to change
+    total_values = df.size
+    num_values_to_change = int(total_values * percentage)
 
-# This function is used to create misleading model of the world that agents will sometimes test
-# is works by forming a distribution based on a small sample
-def create_misleading_BN(DAG, sample_size):
-    truth = bn.import_DAG(DAG, CPD=True, verbose=0)
-    background = bn.import_DAG(DAG, CPD=False, verbose=0)
-    info = bn.sampling(truth, sample_size, verbose=0)
-    misleading = learn_distribution(background, info, "ml")
-    return misleading
+    # Flatten the DataFrame to 1D to simplify random selection
+    flat_df = df.to_numpy().flatten()
+
+    # Randomly choose indices to swap
+    indices_to_change = np.random.choice(flat_df.size, num_values_to_change, replace=False)
+
+    # Swap 0s to 1s and 1s to 0s at the selected indices
+    flat_df[indices_to_change] = 1 - flat_df[indices_to_change]
+
+    # Reshape the modified array back into the original DataFrame shape
+    swapped_df = pd.DataFrame(flat_df.reshape(df.shape), columns=df.columns)
+
+    return swapped_df
 
 # Creating an alternative, misleading version of Sprinkler Bayesian Net
 def big_sprinkler():
@@ -161,35 +171,71 @@ def big_sprinkler():
 
     return bn.make_DAG(sprinkler_list, CPD=[cpd_Cloudy, cpd_Sprinkler, cpd_Rain, cpd_Wet_Grass], verbose=0)
 
+def common_prior_sprinkler():
+    sprinkler_list = [("Cloudy", "Sprinkler"), ("Cloudy", "Rain"), ("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]
+    cpd_Cloudy = TabularCPD(variable='Cloudy', variable_card=2, values=[[0.5], [0.5]])
+
+    # CPD for Sprinkler: P(Sprinkler | Cloudy)
+    cpd_Sprinkler = TabularCPD(variable='Sprinkler', variable_card=2,
+                               values=[[0.5, 0.5],  # P(Sprinkler=0 | Cloudy=0), P(Sprinkler=0 | Cloudy=1)
+                                       [0.5, 0.5]],  # P(Sprinkler=1 | Cloudy=0), P(Sprinkler=1 | Cloudy=1)
+                               evidence=['Cloudy'], evidence_card=[2])
+
+    # CPD for Rain: P(Rain | Cloudy)
+    cpd_Rain = TabularCPD(variable='Rain', variable_card=2,
+                          values=[[0.5, 0.5],  # P(Rain=0 | Cloudy=0), P(Rain=0 | Cloudy=1)
+                                  [0.5, 0.5]],  # P(Rain=1 | Cloudy=0), P(Rain=1 | Cloudy=1)
+                          evidence=['Cloudy'], evidence_card=[2])
+
+    # CPD for Wet_Grass: P(Wet_Grass | Sprinkler, Rain)
+    cpd_Wet_Grass = TabularCPD(variable='Wet_Grass', variable_card=2,
+                               values=[[0.5, 0.5, 0.5, 0.5],
+                                       # P(Wet_Grass=0 | Sprinkler=0, Rain=0), ..., P(Wet_Grass=0 | Sprinkler=1, Rain=1)
+                                       [0.5, 0.5, 0.5, 0.5]],
+                               # P(Wet_Grass=1 | Sprinkler=0, Rain=0), ..., P(Wet_Grass=1 | Sprinkler=1, Rain=1)
+                               evidence=['Sprinkler', 'Rain'], evidence_card=[2, 2])
+
+    return bn.make_DAG(sprinkler_list, CPD=[cpd_Cloudy, cpd_Sprinkler, cpd_Rain, cpd_Wet_Grass], verbose=0)
+
 big_sprinkler = big_sprinkler()
+common_prior = common_prior_sprinkler()
 
 
 
 # Agents who consider social coherence
 class CoherenceAgent(mesa.Agent):
-    def __init__(self, unique_id, model, BN, pulls, noise, coherence_style):
+    def __init__(self, unique_id, model, BN, pulls, noise, coherence_style, prior_type):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
         self.background = bn.import_DAG(BN, CPD=False, verbose=0)
         self.pulls = pulls
-        self.info = bn.sampling(self.truth, 10, verbose=0)
-        self.belief = learn_distribution(self.background, self.info, "ml")
+        if prior_type == "random":
+            self.info = bn.sampling(self.truth, 10, verbose=0)
+            self.belief = learn_distribution(self.background, self.info, "ml")
+        if prior_type == "common":
+            self.belief = common_prior
+            self.info = None
         # Possible optimization: create a fixed size dataframe and just fill it and empty it
         self.new_info = None
         self.coherence_style = coherence_style
         self.coherence = coherence(self.belief, self.coherence_style)
         self.accuracy = kl_divergence(self.truth, self.belief)
-        self.noise = noise
-        self.misleading = self.model.misleading
 
 
     # Gathering and sharing data from the world
     def test(self):
-        # Agents have some chance of sampling a misleading BN
-        if random.random() > self.noise:
-            sample = pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0))
-        else:
-            sample = pd.DataFrame(bn.sampling(self.misleading, self.pulls, verbose=0))
+        # Agents can receive two different kinds of misleading evidence
+        # First, a percentage of values in the sample can randomly change
+        if self.model.misleading_type == "noisy_data":
+            sample = noisy_data(pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0)), self.model.noise)
+
+        # Second, they can draw samples from a different Baysian net
+        if self.model.misleading_type == "big_sprinkler":
+            if random.random() > self.model.noise:
+                sample = pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0))
+            else:
+                sample = pd.DataFrame(bn.sampling(big_sprinkler, self.pulls, verbose=0))
+
         # Agents add the sample to a DataFrame that (will) also contain(s) their neighbors shared samples
         if self.new_info is not None:
             self.new_info = pd.concat([self.new_info, sample], ignore_index=True)
@@ -209,7 +255,10 @@ class CoherenceAgent(mesa.Agent):
 
     # This function is used to update agents beliefs about the world
     def update(self):
-        info = pd.concat([self.info, self.new_info], ignore_index=True)
+        if self.info is not None:
+            info = pd.concat([self.info, self.new_info], ignore_index=True)
+        else:
+            info = self.new_info
         # Calculate new belief and its coherence based on aggregated new and existing data
         posterior = learn_distribution(self.background, info, "ml")
         new_coherence = coherence(posterior,self.coherence_style)
@@ -228,26 +277,38 @@ class CoherenceAgent(mesa.Agent):
 
 # Agents who ignore coherence
 class NormalAgent(mesa.Agent):
-    def __init__(self, unique_id, model, BN, pulls, noise):
+    def __init__(self, unique_id, model, BN, pulls, noise, prior_type):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
         self.background = bn.import_DAG(BN, CPD=False, verbose=0)
         self.pulls = pulls
         self.info = bn.sampling(self.truth, 10, verbose=0)
-        self.belief = learn_distribution(self.background, self.info, "ml")
+        if prior_type == "random":
+            self.info = bn.sampling(self.truth, 10, verbose=0)
+            self.belief = learn_distribution(self.background, self.info, "ml")
+        if prior_type == "common":
+            self.belief = common_prior
+            self.info = None
         # Nejc: Worth refactoring to create a fixed size dataframe and just fill it and empty it
         self.new_info = None
         self.accuracy = kl_divergence(self.truth, self.belief)
         self.coherence = None
-        self.noise = noise
-        self.misleading = self.model.misleading
 
 
     def test(self):
-        if random.random() > self.noise:
-            sample = pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0))
-        else:
-            sample = pd.DataFrame(bn.sampling(self.misleading, self.pulls, verbose=0))
+        # Agents can receive two different kinds of misleading evidence
+        # First, a percentage of values in the sample can randomly change
+        if self.model.misleading_type == "noisy_data":
+            sample = noisy_data(pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0)), self.model.noise)
+
+        # Second, they can draw samples from a different Baysian net
+        if self.model.misleading_type == "big_sprinkler":
+            if random.random() > self.model.noise:
+                sample = pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0))
+            else:
+                sample = pd.DataFrame(bn.sampling(big_sprinkler, self.pulls, verbose=0))
+
+        # Agents add the sample to a DataFrame that (will) also contain(s) their neighbors shared samples
         if self.new_info is not None:
             self.new_info = pd.concat([self.new_info, sample], ignore_index=True)
         else:
@@ -272,7 +333,7 @@ class NormalAgent(mesa.Agent):
 
 
 class CoherenceModel(mesa.Model):
-    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type):
+    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type, prior_type):
         super().__init__()
         self.num_agents = N
         self.schedule = mesa.time.StagedActivation(self, stage_list=["test", "update"], shuffle=True)
@@ -281,17 +342,15 @@ class CoherenceModel(mesa.Model):
                     "wheel": nx.wheel_graph}
         self.space = mesa.space.NetworkGrid(networks[network](N))  # Create a model space based on a selected network
         self.ground_truth = bn.import_DAG(BN, CPD=True, verbose=0) # BN with true distribution agents try to approximate
-        if misleading_type == "small_sample":
-            self.misleading = create_misleading_BN(BN, pulls)  # BN with misleading distribution based on a small sample
-        elif misleading_type == "big_sprinkler":
-            self.misleading = big_sprinkler   # BN where the effect of sprinkler on grass in artificially inflated
+        self.misleading_type = misleading_type
+        self.noise = noise
 
         # Create a list of agents and place them in a network
         for i in range(self.num_agents):
             if agent_type == "CoherenceAgent":
-                a = CoherenceAgent(i, self, BN, pulls, noise, coherence_style)
+                a = CoherenceAgent(i, self, BN, pulls, noise, coherence_style, prior_type)
             elif agent_type == "NormalAgent":
-                a = NormalAgent(i, self, BN, pulls, noise)
+                a = NormalAgent(i, self, BN, pulls, noise, prior_type)
 
             self.schedule.add(a)
             self.space.place_agent(a, i) if self.space.is_cell_empty(i) else exit(1)
