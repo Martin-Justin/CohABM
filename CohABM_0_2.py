@@ -10,9 +10,15 @@ import bnlearn as bn
 import networkx as nx
 import logging
 
+from CohABM_BNs import big_sprinkler, common_prior_sprinkler, common_prior_limited_sprinkler
+
 # Suppressing warning messages from the pgmpy library
 logging.getLogger("pgmpy").setLevel(logging.CRITICAL)
 
+
+big_sprinkler = big_sprinkler()
+common_prior_s = common_prior_sprinkler()
+common_prior_limited_s = common_prior_limited_sprinkler()
 
 
 def learn_distribution(DAG, info, method):  # info must be type DataFrame
@@ -171,10 +177,12 @@ class CoherenceAgent(mesa.Agent):
     def __init__(self, unique_id, model, pulls, coherence_style, prior, background):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
-        self.background = bn.make_DAG(background, CPD=None, verbose=0)
+        backgrounds = {"sprinkler": [("Cloudy", "Sprinkler"), ("Cloudy", "Rain"), ("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")],
+                       "limited_sprinkler": [("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]}
+        self.background = bn.make_DAG(backgrounds[background], CPD=None, verbose=0)
         self.pulls = pulls
         self.edges = set()
-        for pairs in background:
+        for pairs in backgrounds[background]:
             for edge in pairs:
                 self.edges.add(edge)
         if prior == "random":
@@ -184,14 +192,16 @@ class CoherenceAgent(mesa.Agent):
             if section:
                 self.info.drop(section, axis="Columns", inplace=True)
             self.belief = learn_distribution(self.background, self.info, "ml")
-        if prior == "true":
+        elif prior == "true":
             self.belief = self.truth
             self.info = None
-        else:
-            self.belief = prior
+        elif prior == "common":
+            self.belief = common_prior_s
+            self.info = None
+        elif prior == "limited_common":
+            self.belief = common_prior_limited_s
             self.info = None
         # Possible optimization: create a fixed size dataframe and just fill it and empty it
-        self.new_info = None
         self.coherence_style = coherence_style
         self.coherence = coherence(self.belief, self.coherence_style)
         self.accuracy = kl_divergence(self.truth, self.belief)
@@ -262,11 +272,13 @@ class NormalAgent(mesa.Agent):
     def __init__(self, unique_id, model, pulls, prior, background):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
-        self.background = bn.make_DAG(background, CPD=None, verbose=0)
+        backgrounds = {"sprinkler": [("Cloudy", "Sprinkler"), ("Cloudy", "Rain"), ("Rain", "Wet_Grass"),
+                                     ("Sprinkler", "Wet_Grass")],
+                       "limited_sprinkler": [("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]}
+        self.background = bn.make_DAG(backgrounds[background], CPD=None, verbose=0)
         self.pulls = pulls
-        self.info = bn.sampling(self.truth, 10, verbose=0)
         self.edges = set()
-        for pairs in background:
+        for pairs in backgrounds[background]:
             for edge in pairs:
                 self.edges.add(edge)
         if prior == "random":
@@ -279,11 +291,13 @@ class NormalAgent(mesa.Agent):
         if prior == "true":
             self.belief = self.truth
             self.info = None
-        else:
-            self.belief = prior
+        elif prior == "common":
+            self.belief = common_prior_s
+            self.info = None
+        elif prior == "limited_common":
+            self.belief = common_prior_limited_s
             self.info = None
         # Nejc: Worth refactoring to create a fixed size dataframe and just fill it and empty it
-        self.new_info = None
         self.accuracy = kl_divergence(self.truth, self.belief)
         self.coherence = None
         self.edges = set()
@@ -350,7 +364,10 @@ class CoherenceModel(mesa.Model):
                     "wheel": nx.wheel_graph}
         self.space = mesa.space.NetworkGrid(networks[network](N))  # Create a model space based on a selected network
         self.ground_truth = bn.import_DAG(BN, CPD=True, verbose=0) # BN with true distribution agents try to approximate
-        self.misleading_type = misleading_type
+        if misleading_type == "big_sprinkler":
+             self.misleading_type = big_sprinkler
+        else:
+            self.misleading_type = "noisy_data"
         self.noise = noise
 
         # Create a list of agents and place them in a network
