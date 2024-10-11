@@ -202,6 +202,7 @@ class CoherenceAgent(mesa.Agent):
             self.belief = common_prior_limited_s
             self.info = None
         # Possible optimization: create a fixed size dataframe and just fill it and empty it
+        self.new_info = None
         self.coherence_style = coherence_style
         self.coherence = coherence(self.belief, self.coherence_style)
         self.accuracy = kl_divergence(self.truth, self.belief)
@@ -298,13 +299,9 @@ class NormalAgent(mesa.Agent):
             self.belief = common_prior_limited_s
             self.info = None
         # Nejc: Worth refactoring to create a fixed size dataframe and just fill it and empty it
+        self.new_info = None
         self.accuracy = kl_divergence(self.truth, self.belief)
         self.coherence = None
-        self.edges = set()
-        for pairs in background:
-            for edge in pairs:
-                self.edges.add(edge)
-
 
     def test(self):
         # Agents can receive two different kinds of misleading evidence

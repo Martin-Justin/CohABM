@@ -16,7 +16,7 @@ params_common = {"N":10,
            "network": ["complete", "wheel", "cycle"],
            "BN": "sprinkler",
            "pulls":100,
-           "agent_type":["CoherenceAgent", "NormalAgent"],
+           "agent_type":["CoherenceAgent","NormalAgent"],
            "noise":[0, 0.25, 0.5, 0.75],
            "coherence_style":["ogPlus", "og", "shogenji"],
            "misleading_type": ["noisy_data", "big_sprinkler"],
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         parameters=params_common,
         iterations=20,
         max_steps=30,
-        number_processes=1,
+        number_processes=None,
         data_collection_period=1,
         display_progress=True,)
 
