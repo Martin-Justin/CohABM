@@ -8,7 +8,6 @@ import pandas as pd
 import random
 import bnlearn as bn
 import networkx as nx
-from pgmpy.factors.discrete import TabularCPD
 import logging
 
 # Suppressing warning messages from the pgmpy library
@@ -18,7 +17,6 @@ logging.getLogger("pgmpy").setLevel(logging.CRITICAL)
 
 def learn_distribution(DAG, info, method):  # info must be type DataFrame
     return bn.parameter_learning.fit(DAG, info, methodtype=method, verbose=0)
-
 
 
 def prob_distr(model):
@@ -65,6 +63,27 @@ def union_probability(joint_row,prob_distr):
         return 1
 
 
+def reduce_distribution(actual, believed):
+    """
+    Reduce a n-event probability distribution DataFrame to a (n-1)-event one.
+
+    :param df4: DataFrame, with n event columns and a probability column.
+    :param df3: DataFrame, with n-1 event columns and a probability column.
+    :return: DataFrame, reduced probability distribution matching the (n-1)-event structure of believed.
+    """
+    # Select only the first 3 columns from df3 as keys
+    believed_keys = believed.iloc[:, :-1]
+    events = believed_keys.columns.tolist()
+
+    # Group df4 by the first three columns (ignoring the fourth event) and sum probabilities
+    actual_grouped = actual.groupby(events).agg({actual.columns[len(events)+1]: 'sum'}).reset_index()
+
+    # Merge df4_grouped with df3 to keep only matching 3-event combinations
+    df_reduced = pd.merge(believed_keys, actual_grouped, on=events, how='left')
+
+    return df_reduced
+
+
 def coherence(model,style="shogenji"):
     # style: "shogenji" (1999; keynes, 1923) or "og" (olsson, 2001; glass, 2001)
     # shogenji style
@@ -109,6 +128,8 @@ def kl_divergence(actual, believed):
     # the function takes the actual model (here ground_truth) and the believed model as input and assesses how much information content differs in the believed from the true model.
     actual_df = prob_distr(actual)
     believed_df = prob_distr(believed)
+    if len(actual_df.columns) != len(believed_df.columns):
+        actual_df = reduce_distribution(actual_df, believed_df)
     labels = actual_df.columns.tolist()
     merged_df = pd.merge(actual_df[labels],
                          believed_df[labels],
@@ -144,76 +165,30 @@ def noisy_data(df: pd.DataFrame, percentage: float) -> pd.DataFrame:
 
     return swapped_df
 
-# Creating an alternative, misleading version of Sprinkler Bayesian Net
-def big_sprinkler():
-    sprinkler_list = [("Cloudy", "Sprinkler"), ("Cloudy", "Rain"), ("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]
-    cpd_Cloudy = TabularCPD(variable='Cloudy', variable_card=2, values=[[0.5], [0.5]])
-
-    # CPD for Sprinkler: P(Sprinkler | Cloudy)
-    cpd_Sprinkler = TabularCPD(variable='Sprinkler', variable_card=2,
-                               values=[[0.5, 0.9],  # P(Sprinkler=0 | Cloudy=0), P(Sprinkler=0 | Cloudy=1)
-                                       [0.5, 0.1]],  # P(Sprinkler=1 | Cloudy=0), P(Sprinkler=1 | Cloudy=1)
-                               evidence=['Cloudy'], evidence_card=[2])
-
-    # CPD for Rain: P(Rain | Cloudy)
-    cpd_Rain = TabularCPD(variable='Rain', variable_card=2,
-                          values=[[0.8, 0.2],  # P(Rain=0 | Cloudy=0), P(Rain=0 | Cloudy=1)
-                                  [0.2, 0.8]],  # P(Rain=1 | Cloudy=0), P(Rain=1 | Cloudy=1)
-                          evidence=['Cloudy'], evidence_card=[2])
-
-    # CPD for Wet_Grass: P(Wet_Grass | Sprinkler, Rain)
-    cpd_Wet_Grass = TabularCPD(variable='Wet_Grass', variable_card=2,
-                               values=[[0.99, 0.9, 0.1, 0.01],
-                                       # P(Wet_Grass=0 | Sprinkler=0, Rain=0), ..., P(Wet_Grass=0 | Sprinkler=1, Rain=1)
-                                       [0.01, 0.1, 0.9, 0.99]],
-                               # P(Wet_Grass=1 | Sprinkler=0, Rain=0), ..., P(Wet_Grass=1 | Sprinkler=1, Rain=1)
-                               evidence=['Sprinkler', 'Rain'], evidence_card=[2, 2])
-
-    return bn.make_DAG(sprinkler_list, CPD=[cpd_Cloudy, cpd_Sprinkler, cpd_Rain, cpd_Wet_Grass], verbose=0)
-
-def common_prior_sprinkler():
-    sprinkler_list = [("Cloudy", "Sprinkler"), ("Cloudy", "Rain"), ("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]
-    cpd_Cloudy = TabularCPD(variable='Cloudy', variable_card=2, values=[[0.5], [0.5]])
-
-    # CPD for Sprinkler: P(Sprinkler | Cloudy)
-    cpd_Sprinkler = TabularCPD(variable='Sprinkler', variable_card=2,
-                               values=[[0.5, 0.5],  # P(Sprinkler=0 | Cloudy=0), P(Sprinkler=0 | Cloudy=1)
-                                       [0.5, 0.5]],  # P(Sprinkler=1 | Cloudy=0), P(Sprinkler=1 | Cloudy=1)
-                               evidence=['Cloudy'], evidence_card=[2])
-
-    # CPD for Rain: P(Rain | Cloudy)
-    cpd_Rain = TabularCPD(variable='Rain', variable_card=2,
-                          values=[[0.5, 0.5],  # P(Rain=0 | Cloudy=0), P(Rain=0 | Cloudy=1)
-                                  [0.5, 0.5]],  # P(Rain=1 | Cloudy=0), P(Rain=1 | Cloudy=1)
-                          evidence=['Cloudy'], evidence_card=[2])
-
-    # CPD for Wet_Grass: P(Wet_Grass | Sprinkler, Rain)
-    cpd_Wet_Grass = TabularCPD(variable='Wet_Grass', variable_card=2,
-                               values=[[0.5, 0.5, 0.5, 0.5],
-                                       # P(Wet_Grass=0 | Sprinkler=0, Rain=0), ..., P(Wet_Grass=0 | Sprinkler=1, Rain=1)
-                                       [0.5, 0.5, 0.5, 0.5]],
-                               # P(Wet_Grass=1 | Sprinkler=0, Rain=0), ..., P(Wet_Grass=1 | Sprinkler=1, Rain=1)
-                               evidence=['Sprinkler', 'Rain'], evidence_card=[2, 2])
-
-    return bn.make_DAG(sprinkler_list, CPD=[cpd_Cloudy, cpd_Sprinkler, cpd_Rain, cpd_Wet_Grass], verbose=0)
-
-big_sprinkler = big_sprinkler()
-common_prior = common_prior_sprinkler()
-
-
 
 # Agents who consider social coherence
 class CoherenceAgent(mesa.Agent):
-    def __init__(self, unique_id, model, BN, pulls, coherence_style, prior_type):
+    def __init__(self, unique_id, model, pulls, coherence_style, prior, background):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
-        self.background = bn.import_DAG(BN, CPD=False, verbose=0)
+        self.background = bn.make_DAG(background, CPD=None, verbose=0)
         self.pulls = pulls
-        if prior_type == "random":
+        self.edges = set()
+        for pairs in background:
+            for edge in pairs:
+                self.edges.add(edge)
+        if prior == "random":
             self.info = bn.sampling(self.truth, 10, verbose=0)
+            info_edges = set(self.info.columns)
+            section = info_edges - (info_edges & self.edges)
+            if section:
+                self.info.drop(section, axis="Columns", inplace=True)
             self.belief = learn_distribution(self.background, self.info, "ml")
-        if prior_type == "common":
-            self.belief = common_prior
+        if prior == "true":
+            self.belief = self.truth
+            self.info = None
+        else:
+            self.belief = prior
             self.info = None
         # Possible optimization: create a fixed size dataframe and just fill it and empty it
         self.new_info = None
@@ -230,11 +205,11 @@ class CoherenceAgent(mesa.Agent):
             sample = noisy_data(pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0)), self.model.noise)
 
         # Second, they can draw samples from a different Baysian net
-        if self.model.misleading_type == "big_sprinkler":
+        else:
             if random.random() > self.model.noise:
                 sample = pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0))
             else:
-                sample = pd.DataFrame(bn.sampling(big_sprinkler, self.pulls, verbose=0))
+                sample = pd.DataFrame(bn.sampling(self.model.misleading_type, self.pulls, verbose=0))
 
         # Agents add the sample to a DataFrame that (will) also contain(s) their neighbors shared samples
         if self.new_info is not None:
@@ -255,6 +230,14 @@ class CoherenceAgent(mesa.Agent):
 
     # This function is used to update agents beliefs about the world
     def update(self):
+        # Agents can have a limited picture of the world, so they can get more evidence that they can account of
+        # This first checks if info includes more edges than agents' background
+        # Then it appropriately limits the evidence if necessary
+        info_edges = set(self.new_info.columns)
+        section = info_edges - (info_edges & self.edges)
+        if section:
+            self.new_info.drop(section, axis="columns", inplace=True)
+
         if self.info is not None:
             info = pd.concat([self.info, self.new_info], ignore_index=True)
         else:
@@ -274,25 +257,39 @@ class CoherenceAgent(mesa.Agent):
         self.new_info = None
 
 
-
 # Agents who ignore coherence
 class NormalAgent(mesa.Agent):
-    def __init__(self, unique_id, model, BN, pulls, prior_type):
+    def __init__(self, unique_id, model, pulls, prior, background):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
-        self.background = bn.import_DAG(BN, CPD=False, verbose=0)
+        self.background = bn.make_DAG(background, CPD=None, verbose=0)
         self.pulls = pulls
         self.info = bn.sampling(self.truth, 10, verbose=0)
-        if prior_type == "random":
+        self.edges = set()
+        for pairs in background:
+            for edge in pairs:
+                self.edges.add(edge)
+        if prior == "random":
             self.info = bn.sampling(self.truth, 10, verbose=0)
+            info_edges = set(self.info.columns)
+            section = info_edges - (info_edges & self.edges)
+            if section:
+                self.info.drop(section, axis="Columns", inplace=True)
             self.belief = learn_distribution(self.background, self.info, "ml")
-        if prior_type == "common":
-            self.belief = common_prior
+        if prior == "true":
+            self.belief = self.truth
+            self.info = None
+        else:
+            self.belief = prior
             self.info = None
         # Nejc: Worth refactoring to create a fixed size dataframe and just fill it and empty it
         self.new_info = None
         self.accuracy = kl_divergence(self.truth, self.belief)
         self.coherence = None
+        self.edges = set()
+        for pairs in background:
+            for edge in pairs:
+                self.edges.add(edge)
 
 
     def test(self):
@@ -302,11 +299,11 @@ class NormalAgent(mesa.Agent):
             sample = noisy_data(pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0)), self.model.noise)
 
         # Second, they can draw samples from a different Baysian net
-        if self.model.misleading_type == "big_sprinkler":
+        else:
             if random.random() > self.model.noise:
                 sample = pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0))
             else:
-                sample = pd.DataFrame(bn.sampling(big_sprinkler, self.pulls, verbose=0))
+                sample = pd.DataFrame(bn.sampling(self.model.misleading_type, self.pulls, verbose=0))
 
         # Agents add the sample to a DataFrame that (will) also contain(s) their neighbors shared samples
         if self.new_info is not None:
@@ -324,7 +321,18 @@ class NormalAgent(mesa.Agent):
 
 
     def update(self):
-        info = pd.concat([self.info, self.new_info], ignore_index=True)
+        # Agents can have a limited picture of the world, so they can get more evidence that they can account of
+        # This first checks if info includes more edges than agents' background
+        # Then it appropriately limits the evidence if necessary
+        info_edges = set(self.new_info.columns)
+        section = info_edges - (info_edges & self.edges)
+        if section:
+            self.new_info.drop(section, axis="columns", inplace=True)
+
+        if self.info is not None:
+            info = pd.concat([self.info, self.new_info], ignore_index=True)
+        else:
+            info = self.new_info
         self.belief = learn_distribution(self.background, info, "ml")
         self.info = info
         self.accuracy = kl_divergence(self.truth, self.belief)
@@ -333,7 +341,7 @@ class NormalAgent(mesa.Agent):
 
 
 class CoherenceModel(mesa.Model):
-    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type, prior_type):
+    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type, prior, background):
         super().__init__()
         self.num_agents = N
         self.schedule = mesa.time.StagedActivation(self, stage_list=["test", "update"], shuffle=True)
@@ -348,9 +356,9 @@ class CoherenceModel(mesa.Model):
         # Create a list of agents and place them in a network
         for i in range(self.num_agents):
             if agent_type == "CoherenceAgent":
-                a = CoherenceAgent(i, self, BN, pulls, coherence_style, prior_type)
+                a = CoherenceAgent(i, self, pulls, coherence_style, prior, background)
             elif agent_type == "NormalAgent":
-                a = NormalAgent(i, self, BN, pulls, prior_type)
+                a = NormalAgent(i, self, pulls, prior, background)
 
             self.schedule.add(a)
             self.space.place_agent(a, i) if self.space.is_cell_empty(i) else exit(1)

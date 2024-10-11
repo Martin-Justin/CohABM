@@ -1,18 +1,31 @@
 from CohABM_0_2 import CoherenceModel
 import pandas as pd
+import bnlearn as bn
 import mesa
 from multiprocessing import freeze_support
+from CohABM_BNs import big_sprinkler, common_prior_sprinkler, common_prior_limited_sprinkler
 
+big_sprinkler = big_sprinkler()
+common_prior_s = common_prior_sprinkler()
+common_prior_limited_s = common_prior_limited_sprinkler()
+sprinkler = [("Cloudy", "Sprinkler"), ("Cloudy", "Rain"), ("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]
+limited_sprinkler = [("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]
+
+
+# Currently, the "prior" and "background" values in parameters must match:
+# --- given prior must correspond to the number of edges in background
+# --- except for "random" prior which is already generated based on "background" value
 
 params = {"N":10,
-           "network": ["complete", "cycle", "wheel"],
+           "network": ["complete"],
            "BN": "sprinkler",
            "pulls":100,
            "agent_type":["CoherenceAgent", "NormalAgent"],
-           "noise":0.1,
-           "coherence_style":["ogPlus"],
-           "misleading_type": ["noisy_data", "big_sprinkler"],
-           "prior_type": ["common", "random"]}
+           "noise":[0.2, 0.8],
+           "coherence_style":["ogPlus", "og", "shogenji"],
+           "misleading_type": ["noisy_data"],
+           "prior": [common_prior_limited_s],
+           "background": [limited_sprinkler]}
 
 if __name__ == '__main__':
     freeze_support()
@@ -27,4 +40,4 @@ if __name__ == '__main__':
 
 #Export results
     results_df = pd.DataFrame(results)
-    results_df.to_csv("C:/Users/marti/Documents/coherence_results/test_00.csv")
+    results_df.to_csv("results.csv")
