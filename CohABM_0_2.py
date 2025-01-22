@@ -10,7 +10,7 @@ import bnlearn as bn
 import networkx as nx
 import logging
 
-from CohABM_BNs import big_sprinkler, common_prior_sprinkler, common_prior_limited_sprinkler
+from CohABM_BNs import big_sprinkler, common_prior_sprinkler, common_prior_limited_sprinkler, noisier_model
 
 # Suppressing warning messages from the pgmpy library
 logging.getLogger("pgmpy").setLevel(logging.CRITICAL)
@@ -174,12 +174,13 @@ def noisy_data(df: pd.DataFrame, percentage: float) -> pd.DataFrame:
 
 # Agents who consider social coherence
 class CoherenceAgent(mesa.Agent):
-    def __init__(self, unique_id, model, pulls, coherence_style, prior, background):
+    def __init__(self, unique_id, model, pulls, coherence_style, prior, background, distance_from_truth):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
         backgrounds = {"sprinkler": [("Cloudy", "Sprinkler"), ("Cloudy", "Rain"), ("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")],
                        "limited_sprinkler": [("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]}
         self.background = bn.make_DAG(backgrounds[background], CPD=None, verbose=0)
+        self.distance_from_truth = distance_from_truth
         self.pulls = pulls
         self.edges = set()
         for pairs in backgrounds[background]:
@@ -192,6 +193,9 @@ class CoherenceAgent(mesa.Agent):
             if section:
                 self.info.drop(section, axis="Columns", inplace=True)
             self.belief = learn_distribution(self.background, self.info, "ml")
+        elif prior == "approx_true":
+            self.belief = noisier_model(self.truth, self.distance_from_truth)
+            self.info = None
         elif prior == "true":
             self.belief = self.truth
             self.info = None
@@ -270,12 +274,13 @@ class CoherenceAgent(mesa.Agent):
 
 # Agents who ignore coherence
 class NormalAgent(mesa.Agent):
-    def __init__(self, unique_id, model, pulls, prior, background):
+    def __init__(self, unique_id, model, pulls, prior, background, distance_from_truth):
         super().__init__(unique_id, model)
         self.truth = self.model.ground_truth
         backgrounds = {"sprinkler": [("Cloudy", "Sprinkler"), ("Cloudy", "Rain"), ("Rain", "Wet_Grass"),
                                      ("Sprinkler", "Wet_Grass")],
                        "limited_sprinkler": [("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]}
+        self.distance_from_truth = distance_from_truth
         self.background = bn.make_DAG(backgrounds[background], CPD=None, verbose=0)
         self.pulls = pulls
         self.edges = set()
@@ -289,7 +294,10 @@ class NormalAgent(mesa.Agent):
             if section:
                 self.info.drop(section, axis="Columns", inplace=True)
             self.belief = learn_distribution(self.background, self.info, "ml")
-        if prior == "true":
+        elif prior == "approx_true":
+            self.belief = noisier_model(self.truth, self.distance_from_truth)
+            self.info = None
+        elif prior == "true":
             self.belief = self.truth
             self.info = None
         elif prior == "common":
@@ -352,7 +360,7 @@ class NormalAgent(mesa.Agent):
 
 
 class CoherenceModel(mesa.Model):
-    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type, prior, background):
+    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type, prior, background, distance_from_truth):
         super().__init__()
         self.num_agents = N
         self.schedule = mesa.time.StagedActivation(self, stage_list=["test", "update"], shuffle=True)
@@ -370,9 +378,9 @@ class CoherenceModel(mesa.Model):
         # Create a list of agents and place them in a network
         for i in range(self.num_agents):
             if agent_type == "CoherenceAgent":
-                a = CoherenceAgent(i, self, pulls, coherence_style, prior, background)
+                a = CoherenceAgent(i, self, pulls, coherence_style, prior, background, distance_from_truth)
             elif agent_type == "NormalAgent":
-                a = NormalAgent(i, self, pulls, prior, background)
+                a = NormalAgent(i, self, pulls, prior, background, distance_from_truth)
 
             self.schedule.add(a)
             self.space.place_agent(a, i) if self.space.is_cell_empty(i) else exit(1)

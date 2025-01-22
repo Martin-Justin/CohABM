@@ -152,3 +152,5 @@ cython_debug/
 .idea/
 /CohABM.py
 /CohABM_analysis.py
+/evgenija.py
+/test_martin.py
