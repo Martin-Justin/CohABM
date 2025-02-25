@@ -82,9 +82,9 @@ def big_sprinkler():
 
     # CPD for Wet_Grass: P(Wet_Grass | Sprinkler, Rain)
     cpd_Wet_Grass = TabularCPD(variable='Wet_Grass', variable_card=2,
-                               values=[[0.99, 0.9, 0.1, 0.01],
+                               values=[[0.99, 0.6, 0.1, 0.01],
                                        # P(Wet_Grass=0 | Sprinkler=0, Rain=0), ..., P(Wet_Grass=0 | Sprinkler=1, Rain=1)
-                                       [0.01, 0.1, 0.9, 0.99]],
+                                       [0.01, 0.4, 0.9, 0.99]],
                                # P(Wet_Grass=1 | Sprinkler=0, Rain=0), ..., P(Wet_Grass=1 | Sprinkler=1, Rain=1)
                                evidence=['Sprinkler', 'Rain'], evidence_card=[2, 2])
 

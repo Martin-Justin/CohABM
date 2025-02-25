@@ -154,3 +154,5 @@ cython_debug/
 /CohABM_analysis.py
 /evgenija.py
 /test_martin.py
+/CohABM_0_2.py
+/CohABM_results_old.py

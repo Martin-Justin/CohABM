@@ -210,6 +210,10 @@ class CoherenceAgent(mesa.Agent):
         self.coherence_style = coherence_style
         self.coherence = coherence(self.belief, self.coherence_style)
         self.accuracy = kl_divergence(self.truth, self.belief)
+        # if self.accuracy > 1:
+        #     self.noise = 0.49
+        # else:
+        #     self.noise = self.model.noise * self.accuracy
 
 
     # Gathering and sharing data from the world
@@ -310,6 +314,10 @@ class NormalAgent(mesa.Agent):
         self.new_info = None
         self.accuracy = kl_divergence(self.truth, self.belief)
         self.coherence = None
+        # if self.accuracy > 1:
+        #     self.noise = 0.49
+        # else:
+        #     self.noise = self.model.noise * self.accuracy
 
     def test(self):
         # Agents can receive two different kinds of misleading evidence
@@ -359,8 +367,9 @@ class NormalAgent(mesa.Agent):
 
 
 
+
 class CoherenceModel(mesa.Model):
-    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type, prior, background, distance_from_truth):
+    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type, prior, background, distance_from_truth, experts_ratio):
         super().__init__()
         self.num_agents = N
         self.schedule = mesa.time.StagedActivation(self, stage_list=["test", "update"], shuffle=True)
@@ -376,14 +385,27 @@ class CoherenceModel(mesa.Model):
         self.noise = noise
 
         # Create a list of agents and place them in a network
+        experts = N * experts_ratio
+        agents = list()
         for i in range(self.num_agents):
             if agent_type == "CoherenceAgent":
-                a = CoherenceAgent(i, self, pulls, coherence_style, prior, background, distance_from_truth)
+                if i < experts:
+                    a = CoherenceAgent(i, self, pulls, coherence_style, prior, background, 0)
+                else:
+                    a = CoherenceAgent(i, self, pulls, coherence_style, prior, background, distance_from_truth)
             elif agent_type == "NormalAgent":
-                a = NormalAgent(i, self, pulls, prior, background, distance_from_truth)
+                if i < experts:
+                    a = NormalAgent(i, self, pulls, prior, background, 0)
+                else:
+                    a = NormalAgent(i, self, pulls, prior, background, distance_from_truth)
 
             self.schedule.add(a)
-            self.space.place_agent(a, i) if self.space.is_cell_empty(i) else exit(1)
+            agents.append(a)
+
+        positions = list(range(self.num_agents))
+        random.shuffle(positions)
+        for agent, position in zip(agents, positions):
+            self.space.place_agent(agent, position) if self.space.is_cell_empty(position) else exit(1)
 
         # Define data collection -> here we are interested in coherence and accuracy of agents' beliefs
         self.datacollector = mesa.DataCollector(
