@@ -87,6 +87,6 @@ if __name__ == '__main__':
 
 ---
 
-Bot the code for the model and its conceptual development is a joint work by [Borut Trpin](https://boruttrpin.weebly.com/) 
+Both the code for the model and its conceptual development is a joint work by [Borut Trpin](https://boruttrpin.weebly.com/) 
 and [Martin Justin](https://martin-justin.github.io/).
 

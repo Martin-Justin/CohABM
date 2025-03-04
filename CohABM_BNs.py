@@ -136,6 +136,63 @@ def common_prior_limited_sprinkler():
 
     return bn.make_DAG(sprinkler_list, CPD=[cpd_Sprinkler, cpd_Rain, cpd_Wet_Grass], verbose=0)
 
+def big_asia():
+    asia_list = [('asia', 'tub'), ('tub', 'either'), ('smoke', 'lung'), ('smoke', 'bronc'), ('lung', 'either'),
+             ('bronc', 'dysp'), ('either', 'xray'), ('either', 'dysp')]
+
+    # Ignore the comments !!!!
+    cpd_asia = TabularCPD(variable="asia", variable_card=2,
+                          values=[[0.01],  # P(Asia=1)
+                                  [0.99]]) # P(Asia=0)
+
+    # CPD for Tuberculosis given Asia (column order fixed)
+    cpd_tuberculosis = TabularCPD(variable="tub", variable_card=2,
+                                  values=[[0.05, 0.01],  # P(Tub=1 | Asia=0, Asia=1)
+                                          [0.95, 0.99]], # P(Tub=0 | Asia=0, Asia=1)
+                                  evidence=["asia"], evidence_card=[2])
+
+    # CPD for Smoking (root node)
+    cpd_smoking = TabularCPD(variable="smoke", variable_card=2,
+                             values=[[0.5],   # P(Smoking=1)
+                                     [0.5]])  # P(Smoking=0)
+
+    # Changed so that smoking does not casues cancer
+    cpd_lung_cancer = TabularCPD(variable="lung", variable_card=2,
+                                 values=[[0.011, 0.01],  # P(Lung=1 | Smoking=1, Smoking=0)
+                                         [0.999, 0.99]], # P(Lung=0 | Smoking=1 , Smoking=0)
+                                 evidence=["smoke"], evidence_card=[2])
+
+    # CPD for Bronchitis given Smoking (column order fixed)
+    cpd_bronchitis = TabularCPD(variable="bronc", variable_card=2,
+                                values=[[0.31, 0.30],  # P(Bronch=1 | Smoking=1, Smoking=0)
+                                        [0.69, 0.70]], # P(Bronch=0 | Smoking=1, Smoking=0)
+                                evidence=["smoke"], evidence_card=[2])
+
+    # CPD for Either (TubOrCancer) given Tuberculosis and Lung Cancer (column order fixed)
+    cpd_either = TabularCPD(variable="either", variable_card=2,
+                            values=[[1., 1., 1., 0.],  # P(Either=1 | Lung=0, Tub=0; Lung=0, Tub=1; Lung=1, Tub=0; Lung=1, Tub=1)
+                                    [0., 0., 0., 1.]], # P(Either=0 | Lung=0, Tub=0; Lung=0, Tub=1; Lung=1, Tub=0; Lung=1, Tub=1)
+                            evidence=["lung", "tub"],
+                            evidence_card=[2, 2])
+
+    # CPD for XRay given Either (column order fixed)
+    cpd_xray = TabularCPD(variable="xray", variable_card=2,
+                          values=[[0.98, 0.05],  # P(XRay=1 | Either=0, Either=1)
+                                  [0.02, 0.95]], # P(XRay=0 | Either=0, Either=1)
+                          evidence=["either"], evidence_card=[2])
+
+    # CPD for Dyspnea given Bronchitis and Either (column order fixed)
+    cpd_dyspnea = TabularCPD(variable="dysp", variable_card=2,
+                             values=[[0.90, 0.80, 0.70, 0.10],
+                                     [0.10, 0.20, 0.30, 0.90]],
+                             evidence=["bronc", "either"],
+                             evidence_card=[2, 2])
+
+
+    cpds = [cpd_asia, cpd_bronchitis, cpd_dyspnea, cpd_either, cpd_lung_cancer, cpd_smoking, cpd_tuberculosis, cpd_xray]
+
+    return bn.make_DAG(asia_list, CPD=cpds, verbose=0)
+
 # def limited_sprinkler():
 #     lim_sprinker_list = [("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]
 #     return bn.make_DAG(lim_sprinker_list, CPD=None, verbose=0)

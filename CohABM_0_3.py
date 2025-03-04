@@ -9,7 +9,7 @@ import bnlearn as bn
 import networkx as nx
 import logging
 
-from CohABM_BNs import big_sprinkler, common_prior_sprinkler, common_prior_limited_sprinkler, noisier_model
+from CohABM_BNs import big_sprinkler, common_prior_sprinkler, common_prior_limited_sprinkler, noisier_model, big_asia
 from CohABM_functions import learn_distribution, kl_divergence, noisy_data, coherence
 
 # Suppressing warning messages from the pgmpy library
@@ -17,6 +17,7 @@ logging.getLogger("pgmpy").setLevel(logging.CRITICAL)
 
 
 big_sprinkler = big_sprinkler()
+big_asia = big_asia()
 common_prior_s = common_prior_sprinkler()
 common_prior_limited_s = common_prior_limited_sprinkler()
 
@@ -27,7 +28,8 @@ class NormalAgent(mesa.Agent):
         self.truth = self.model.ground_truth
         backgrounds = {"sprinkler": [("Cloudy", "Sprinkler"), ("Cloudy", "Rain"), ("Rain", "Wet_Grass"),
                                      ("Sprinkler", "Wet_Grass")],
-                       "limited_sprinkler": [("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")]}
+                       "limited_sprinkler": [("Rain", "Wet_Grass"), ("Sprinkler", "Wet_Grass")],
+                       "asia": [('asia', 'tub'), ('tub', 'either'), ('smoke', 'lung'), ('smoke', 'bronc'), ('lung', 'either'), ('bronc', 'dysp'), ('either', 'xray'), ('either', 'dysp')]}
         self.distance_from_truth = distance_from_truth
         self.background = bn.make_DAG(backgrounds[background], CPD=None, verbose=0)
         self.pulls = pulls
@@ -145,8 +147,43 @@ class CoherenceAgent(NormalAgent):
         self.new_info = None
 
 
+class ModerateCoherenceAgent(NormalAgent):
+    def __init__(self, unique_id, model, pulls, coherence_style, prior, background, distance_from_truth, latitude):
+        super().__init__(unique_id, model, pulls, prior, background, distance_from_truth)
+        self.coherence_style = coherence_style
+        self.coherence = coherence(self.belief, self.coherence_style)
+        self.latitude = latitude
+        self.evidence_counter = 0
+
+    def update(self):
+        info_edges = set(self.new_info.columns)
+        section = info_edges - (info_edges & self.edges)
+        if section:
+            self.new_info.drop(section, axis="columns", inplace=True)
+
+        if self.info is not None:
+            info = pd.concat([self.info, self.new_info], ignore_index=True)
+        else:
+            info = self.new_info
+        posterior = learn_distribution(self.background, info, "ml")
+        new_coherence = coherence(posterior,self.coherence_style)
+        if self.evidence_counter < self.latitude and (self.coherence-new_coherence) < (self.coherence * ((self.latitude - self.evidence_counter)/100)):
+            self.info = info
+            self.coherence = new_coherence
+            self.belief = posterior
+            self.accuracy = kl_divergence(self.truth, self.belief)
+            self.evidence_counter += 1
+        else:
+            if new_coherence > self.coherence:
+                self.info = info
+                self.coherence = new_coherence
+                self.belief = posterior
+                self.accuracy = kl_divergence(self.truth, self.belief)
+                self.evidence_counter += 1
+        self.new_info = None
+
 class CoherenceModel(mesa.Model):
-    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type, prior, background, distance_from_truth, experts_ratio):
+    def __init__(self, N, network, BN, pulls, agent_type, noise, coherence_style, misleading_type, prior, background, distance_from_truth, experts_ratio, latitude):
         super().__init__()
         self.num_agents = N
         self.schedule = mesa.time.StagedActivation(self, stage_list=["test", "update"], shuffle=True)
@@ -157,6 +194,8 @@ class CoherenceModel(mesa.Model):
         self.ground_truth = bn.import_DAG(BN, CPD=True, verbose=0) # BN with true distribution agents try to approximate
         if misleading_type == "big_sprinkler":
              self.misleading_type = big_sprinkler
+        elif misleading_type == "big_asia":
+            self.misleading_type = big_asia
         else:
             self.misleading_type = "noisy_data"
         self.noise = noise
@@ -175,6 +214,11 @@ class CoherenceModel(mesa.Model):
                     a = NormalAgent(i, self, pulls, prior, background, 0)
                 else:
                     a = NormalAgent(i, self, pulls, prior, background, distance_from_truth)
+            elif agent_type == "ModerateCoherenceAgent":
+                if i < experts:
+                    a = ModerateCoherenceAgent(i, self, pulls, coherence_style, prior, background, 0, latitude)
+                else:
+                    a = ModerateCoherenceAgent(i, self, pulls, coherence_style, prior, background, distance_from_truth, latitude)
 
             self.schedule.add(a)
             agents.append(a)
