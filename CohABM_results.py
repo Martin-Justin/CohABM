@@ -26,7 +26,7 @@ if __name__ == '__main__':
         iterations=30,
         max_steps=500,
         number_processes=None,
-        data_collection_period=1,
+        data_collection_period=10,
         display_progress=True,)
 
     #Export results
