@@ -1,0 +1,41 @@
+network unknown {
+}
+variable Cloudy {
+    type discrete [ 2 ] { yes, no };
+    property weight = None ;
+}
+variable Sprinkler {
+    type discrete [ 2 ] { yes, no };
+    property weight = None ;
+}
+variable Rain {
+    type discrete [ 2 ] { yes, no };
+    property weight = None ;
+}
+variable Wet_Grass {
+    type discrete [ 2 ] { yes, no };
+    property weight = None ;
+}
+
+probability ( Cloudy ) {
+    table 0.5, 0.5 ;
+}
+probability ( Sprinkler | Cloudy ) {
+    ( yes ) 0.5, 0.5;
+    ( no ) 0.5, 0.5;
+
+}
+
+probability ( Rain | Cloudy ) {
+    ( yes ) 0.5, 0.5;
+    ( no ) 0.5, 0.5;
+
+}
+
+probability ( Wet_Grass | Sprinkler, Rain ) {
+    ( yes, yes ) 0.5, 0.5;
+    ( yes, no ) 0.5, 0.5;
+    ( no, yes ) 0.5, 0.5;
+    ( no, no ) 0.5, 0.5;
+
+}

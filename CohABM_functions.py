@@ -1,6 +1,12 @@
 import pandas as pd
 import bnlearn as bn
 import numpy as np
+import copy
+from pgmpy.factors.discrete import TabularCPD
+import logging
+
+# Suppressing warning messages from the pgmpy library
+logging.getLogger("pgmpy").setLevel(logging.CRITICAL)
 
 
 def learn_distribution(DAG, info, method):  # info must be type DataFrame
@@ -18,7 +24,7 @@ def prob_distr(model):
 
 
 def marginal_probability(variable, truth, model):
-    ### truth is 0/1 for falsehood/truth.
+    ### truth is the index of the state: for binary variables, this means 0 for True, 1 for False; for variables with multiple states, it is as defined in the .bif file.
     # Nejc: Fix beacuse truth is sometimes a pd.Series
     if isinstance(truth, pd.Series):
         truth = truth.iloc[0]
@@ -79,13 +85,11 @@ def coherence(model,style="shogenji"):
     inference = bn.inference.fit(model, variables=nodes, evidence={}, verbose=0)
     inference_Df = bn.query2df(inference,verbose=0)
     max_p = inference_Df['p'].max()
-    inference_Df.loc[1,"p"]=max_p
     max_probability_rows = inference_Df[inference_Df['p'] == max_p]
     if len(max_probability_rows)>1:
-       max_probability_rows = max_probability_rows.iloc[:1]
-       # random_row=random.choice(range(len(max_probability_rows)))
-       # max_probability_rows=max_probability_rows.iloc[random_row:random_row+1]
-        #if there are multiple equiprobable and maximum probability states, go for a uniformly random one (this is a simplification, but it shouldn't have too much of an impact on the results, I hope)
+       max_probability_rows = max_probability_rows.sample(1)
+
+        #if there are multiple equiprobable and maximum probability states, go for a random one (this is a simplification, but it shouldn't have too much of an impact on the results, I hope)
 
     if style=="shogenji":
         # we identify the most probable world-states
@@ -152,3 +156,49 @@ def noisy_data(df: pd.DataFrame, percentage: float) -> pd.DataFrame:
     swapped_df = pd.DataFrame(flat_df.reshape(df.shape), columns=df.columns)
 
     return swapped_df
+
+def apply_random_change(values, noise_level):
+    modified_values = []
+
+    for n in values:
+        # Define the range for x
+        lower_bound = max(0, n - noise_level)  # Don't go below 0
+        upper_bound = min(1, n + noise_level)  # Don't go above 1
+
+        # Generate a random change x within the bounds
+        x = np.random.uniform(lower_bound, upper_bound)
+
+        # Apply the change and add to the modified list
+        modified_values.append(x)
+    return modified_values
+
+
+def noisier_cpd(cpdTable, noise_level):
+    vals = cpdTable.values.reshape(2, -1).copy()
+    vals[0] = apply_random_change(vals[0], noise_level)
+    vals[1] = [1 - x for x in vals[0]]
+    return vals
+
+
+def noisier_model(model, noise_level):
+    model = copy.deepcopy(model)
+    structure = list(model["model"].edges)
+    cpds = model["model"].cpds
+    new_cpds = []
+    for cpd in cpds:
+        noisy_values = noisier_cpd(cpd, noise_level)
+
+        # Get evidence and evidence_card from the CPD
+        evidence = cpd.variables[1:]  # Exclude the variable itself
+        evidence_card = cpd.cardinality[1:]  # Exclude the variable itself
+
+        # Reconstruct the TabularCPD
+        new_cpd = TabularCPD(
+            variable=cpd.variable,
+            variable_card=cpd.cardinality[0],  # Cardinality of the main variable
+            values=noisy_values,
+            evidence=evidence if evidence else None,  # None if no evidence
+            evidence_card=evidence_card if evidence else None,
+        )
+        new_cpds.append(new_cpd)
+    return bn.make_DAG(structure, CPD=new_cpds, verbose=0)

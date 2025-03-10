@@ -9,17 +9,11 @@ import bnlearn as bn
 import networkx as nx
 import logging
 
-from CohABM_BNs import big_sprinkler, common_prior_sprinkler, common_prior_limited_sprinkler, noisier_model, big_asia
-from CohABM_functions import learn_distribution, kl_divergence, noisy_data, coherence
+from CohABM_functions import learn_distribution, kl_divergence, noisy_data, coherence, noisier_model
 
 # Suppressing warning messages from the pgmpy library
 logging.getLogger("pgmpy").setLevel(logging.CRITICAL)
 
-
-big_sprinkler = big_sprinkler()
-big_asia = big_asia()
-common_prior_s = common_prior_sprinkler()
-common_prior_limited_s = common_prior_limited_sprinkler()
 
 # Agents who ignore coherence
 class NormalAgent(mesa.Agent):
@@ -51,10 +45,10 @@ class NormalAgent(mesa.Agent):
             self.belief = self.truth
             self.info = None
         elif prior == "common":
-            self.belief = common_prior_s
+            self.belief = bn.import_DAG("common_prior_sprinkler.bif", CPD=True, verbose=0)
             self.info = None
         elif prior == "limited_common":
-            self.belief = common_prior_limited_s
+            self.belief = bn.import_DAG("common_prior_limited_sprinkler.bif", CPD=True, verbose=0)
             self.info = None
         # Nejc: Worth refactoring to create a fixed size dataframe and just fill it and empty it
         self.new_info = None
@@ -172,14 +166,14 @@ class ModerateCoherenceAgent(NormalAgent):
             self.coherence = new_coherence
             self.belief = posterior
             self.accuracy = kl_divergence(self.truth, self.belief)
-            self.evidence_counter += 1
+          # self.evidence_counter += 1
         else:
             if new_coherence > self.coherence:
                 self.info = info
                 self.coherence = new_coherence
                 self.belief = posterior
                 self.accuracy = kl_divergence(self.truth, self.belief)
-                self.evidence_counter += 1
+             #  self.evidence_counter += 1
         self.new_info = None
 
 class CoherenceModel(mesa.Model):
@@ -193,9 +187,11 @@ class CoherenceModel(mesa.Model):
         self.space = mesa.space.NetworkGrid(networks[network](N))  # Create a model space based on a selected network
         self.ground_truth = bn.import_DAG(BN, CPD=True, verbose=0) # BN with true distribution agents try to approximate
         if misleading_type == "big_sprinkler":
-             self.misleading_type = big_sprinkler
+             self.misleading_type = bn.import_DAG("big_sprinkler.bif", CPD=True, verbose=0)
         elif misleading_type == "big_asia":
-            self.misleading_type = big_asia
+            self.misleading_type = bn.import_DAG("big_asia.bif", CPD=True, verbose=0)
+        elif misleading_type == "neutral_sprinkler":
+            self.misleading_type = bn.import_DAG("common_prior_sprinkler.bif", CPD=True, verbose=0)
         else:
             self.misleading_type = "noisy_data"
         self.noise = noise
