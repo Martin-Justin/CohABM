@@ -6,14 +6,14 @@ from multiprocessing import freeze_support
 params = {"N":1,
            "network": ["complete"],
            "BN": "sprinkler",
-           "pulls": [100],
+           "pulls": [20, 40, 60],
            "agent_type":["CoherenceAgent", "NormalAgent"],
-           "noise":[0.1],
+           "noise":[0.05, 0.1, 0.15, 0.2, 0.25, 0.3],
            "coherence_style":["ogPlus", "og", "shogenji"],
-           "misleading_type": ["big_sprinkler"],
+           "misleading_type": ["big_sprinkler", "noisy_data"],
            "prior": ["approx_true"],
            "background": ["sprinkler"],
-           "distance_from_truth": [0.1],
+           "distance_from_truth": [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4],
           "experts_ratio": 0,
           "latitude":[0],
 }
@@ -25,10 +25,10 @@ if __name__ == '__main__':
         parameters=params,
         iterations=30,
         max_steps=50,
-        number_processes=4,
+        number_processes=6,
         data_collection_period=1,
         display_progress=True,)
 
     #Export results
     results_df = pd.DataFrame(results)
-    results_df.to_csv("C:/Users/marti/My Drive/Faks/PHD/papers/Social Coherence in Science/testing/new_code_test.csv")
+    results_df.to_csv("C:/Users/marti/My Drive/Faks/PHD/papers/Social Coherence in Science/results for synthese/sprinkler-less-evidence.csv")

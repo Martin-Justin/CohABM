@@ -185,7 +185,7 @@ class CoherenceModel(mesa.Model):
                     "complete": nx.complete_graph,
                     "wheel": nx.wheel_graph}
         self.space = mesa.space.NetworkGrid(networks[network](N))  # Create a model space based on a selected network
-        self.ground_truth = bn.import_DAG(BN, CPD=True, verbose=0) # BN with true distribution agents try to approximate
+        self.ground_truth = bn.import_DAG(f"{BN}.bif", CPD=True, verbose=0) # BN with true distribution agents try to approximate
         if misleading_type == "big_sprinkler":
              self.misleading_type = bn.import_DAG("big_sprinkler.bif", CPD=True, verbose=0)
         elif misleading_type == "big_asia":
