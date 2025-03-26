@@ -40,16 +40,16 @@ class NormalAgent(mesa.Agent):
             self.belief = learn_distribution(self.background, self.info, "ml")
         elif prior == "approx_true":
             self.belief = noisier_model(self.truth, self.distance_from_truth)
-            self.info = None
+            self.info = bn.sampling(self.belief, self.pulls, verbose=0)
         elif prior == "true":
             self.belief = self.truth
-            self.info = None
+            self.info = bn.sampling(self.belief, self.pulls, verbose=0)
         elif prior == "common":
             self.belief = bn.import_DAG("common_prior_sprinkler.bif", CPD=True, verbose=0)
-            self.info = None
+            self.info = bn.sampling(self.belief, self.pulls, verbose=0)
         elif prior == "limited_common":
             self.belief = bn.import_DAG("common_prior_limited_sprinkler.bif", CPD=True, verbose=0)
-            self.info = None
+            self.info = bn.sampling(self.belief, self.pulls, verbose=0)
         # Nejc: Worth refactoring to create a fixed size dataframe and just fill it and empty it
         self.new_info = None
         self.accuracy = kl_divergence(self.truth, self.belief)
@@ -65,7 +65,12 @@ class NormalAgent(mesa.Agent):
         if self.model.misleading_type == "noisy_data":
             sample = noisy_data(pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0)), self.model.noise)
 
-        # Second, they can draw samples from a different Baysian net
+        elif self.model.misleading_type == "combination":
+            if random.random() > self.model.noise:
+                sample = noisy_data(pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0)), self.model.noise)
+            else:
+                sample = noisy_data(pd.DataFrame(bn.sampling(self.model.misleading_type, self.pulls, verbose=0)), self.model.noise)
+
         else:
             if random.random() > self.model.noise:
                 sample = pd.DataFrame(bn.sampling(self.truth, self.pulls, verbose=0))
@@ -188,6 +193,8 @@ class CoherenceModel(mesa.Model):
         self.ground_truth = bn.import_DAG(f"{BN}.bif", CPD=True, verbose=0) # BN with true distribution agents try to approximate
         if misleading_type == "noisy_data":
             self.misleading_type = "noisy_data"
+        elif misleading_type == "combination":
+            self.misleading_type = bn.import_DAG(f"big_sprinkler_minus.bif", CPD=True, verbose=0)
         else:
             self.misleading_type = bn.import_DAG(f"{misleading_type}.bif", CPD=True, verbose=0)
         self.noise = noise
